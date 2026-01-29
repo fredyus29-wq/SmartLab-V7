@@ -1,0 +1,208 @@
+
+---
+
+# 1️⃣ DIAGRAMA DO FRONTEND – SMARTLAB
+
+## 🎯 Objetivo
+
+Definir **como o frontend funciona de ponta a ponta**, garantindo:
+
+* UX unificada (SAP-like)
+* Modularidade real
+* Escalabilidade
+* Zero duplicação de lógica
+* Governança forte (ISO / ambiente regulado)
+
+---
+
+## 🧠 Visão Geral (mental model)
+
+```
+Usuário
+   ↓
+[ Login / Auth ]
+   ↓
+[ SHELL APP (Core UI) ]
+   ↓
+ ┌───────────┬───────────┬───────────┐
+ │   LIMS    │    QMS    │   FSMS    │  ... (outros módulos)
+ └───────────┴───────────┴───────────┘
+   ↓
+[ API Central SmartLab ]
+```
+
+> **Regra de ouro:**
+> O usuário nunca “entra num módulo”.
+> Ele está **sempre no SmartLab**.
+
+---
+
+## 2️⃣ Componentes do Frontend (camadas)
+
+### 🧩 1. Shell App (obrigatório)
+
+**Responsabilidade exclusiva:**
+
+* Autenticação (JWT / SSO futuramente)
+* Contexto do tenant
+* Layout base (header, sidebar, footer)
+* Menu dinâmico
+* Feature flags / licenciamento
+* Guards de acesso
+* Comunicação com API Central
+* Design system (UI5 Web Components)
+
+📌 **O Shell NÃO contém lógica de negócio.**
+
+---
+
+### 🧩 2. Módulos Funcionais (LIMS, QMS, FSMS, TMS…)
+
+Cada módulo é:
+
+* Um **pacote isolado**
+* Sem auth própria
+* Sem layout próprio
+* Sem controle de licença
+* Sem acesso direto ao token
+
+👉 Ele recebe **contexto pronto** do Shell.
+
+---
+
+## 3️⃣ Diagrama lógico detalhado
+
+```
+┌──────────────────────────────────────────┐
+│              Shell App                   │
+│                                          │
+│  ┌───────────┐   ┌───────────────────┐  │
+│  │  Auth     │   │ Tenant Context     │  │
+│  └───────────┘   └───────────────────┘  │
+│        │                    │            │
+│        └──────┬─────────────┘            │
+│               ↓                          │
+│        ┌───────────────┐                │
+│        │ Menu Builder  │◄── Licenças    │
+│        └───────────────┘                │
+│               │                          │
+│        ┌───────────────┐                │
+│        │ Router Core   │                │
+│        └───────────────┘                │
+│               │                          │
+│    ┌──────────┴───────────┐             │
+│    ↓          ↓           ↓             │
+│ [LIMS]      [QMS]       [FSMS]           │
+└──────────────────────────────────────────┘
+```
+
+---
+
+## 4️⃣ Como os módulos são carregados
+
+### 🔹 Lazy loading + Feature Flags
+
+Exemplo mental:
+
+```ts
+if (modules.includes('LIMS')) {
+  loadModule('lims');
+}
+```
+
+✔ Reduz bundle
+✔ Reduz bugs
+✔ Evita código morto ativo
+✔ Facilita vender módulos separados
+
+---
+
+## 5️⃣ Comunicação Shell ↔ Módulos
+
+### Contrato fixo (importantíssimo)
+
+Cada módulo recebe:
+
+```ts
+interface ModuleContext {
+  tenantId: string;
+  user: User;
+  permissions: Permission[];
+  apiClient: SmartLabApi;
+}
+```
+
+🚫 Proibido:
+
+* Módulo buscar token
+* Módulo acessar localStorage
+* Módulo montar menu
+
+---
+
+## 6️⃣ Design e UX (industrial, não “dashboard bonito”)
+
+### Princípios visuais
+
+* **Densidade alta** (mais dados, menos espaço inútil)
+* Tipografia pequena e consistente
+* Cards compactos
+* Nada de “hero cards”
+* Tudo escaneável em segundos
+
+### Componentes base
+
+* `ui5-shellbar`
+* `ui5-side-navigation`
+* `ui5-card` (compact mode)
+* `ui5-table`
+* `ui5-dialog`
+
+---
+
+## 7️⃣ Exemplo de fluxo real (usuário QA Manager)
+
+1. Login
+2. Dashboard geral (KPIs cross-módulo)
+3. Menu mostra:
+
+   * LIMS
+   * QMS
+   * FSMS
+   * TMS
+4. Ele entra em:
+
+   * FSMS → Auditoria
+5. Abre ferramenta (ex: checklist HACCP)
+6. IA sugere:
+
+   * riscos
+   * NCs prováveis
+   * ações padrão
+
+👉 Tudo sem trocar de “app”.
+
+---
+
+## 8️⃣ Por que isso é arquitetura madura?
+
+✔ Igual SAP
+✔ Igual Siemens Opcenter
+✔ Igual Veeva (life sciences)
+✔ Auditável
+✔ Escalável
+✔ Vendável por módulo
+
+---
+
+## ✅ ENTREGA 1 CONCLUÍDA
+
+Você agora tem:
+
+* Modelo claro de frontend
+* Diagrama lógico
+* Regras de responsabilidade
+* Base para passar ao time de código
+
+---
+

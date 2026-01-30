@@ -1,0 +1,615 @@
+# SmartLab MCP Server Configuration
+# Exposes all agents and workflows as capabilities for AI IDEs
+# Compatible with: Claude, AntiGravity, Cursor, Continue, etc
+
+version: "1.0"
+name: "SmartLab Autonomous Workflow System"
+description: "19-agent autonomous development orchestration platform"
+
+# MCP Server metadata
+server:
+  id: "smartlab-workflows"
+  name: "SmartLab Workflows"
+  version: "1.0.0"
+  runtime: "node.js or python"
+  port: 3000
+  protocol: "stdio or HTTP"
+
+# Define all capabilities exposed to AI IDEs
+capabilities:
+  
+  # WORKFLOW EXECUTION CAPABILITY
+  execute_workflow:
+    description: "Execute a complete workflow phase for an agent"
+    input_schema:
+      type: "object"
+      properties:
+        agent_id:
+          type: "string"
+          description: "Agent identifier (e.g., '01_PM_Tech_Lead')"
+          enum:
+            - "01_PM_Tech_Lead"
+            - "02_Backend_Architecture_Lead"
+            - "03_Frontend_Architecture_Lead"
+            - "04_DevOps_Specialist"
+            - "05_QA_Security_Specialist"
+            - "06_AI_ML_Specialist"
+            - "07_Backend_Core_Dev"
+            - "08_Backend_Domain_Dev"
+            - "09_Frontend_Shell_Dev"
+            - "10_Frontend_Module_Dev"
+            - "11_Database_Engineer"
+            - "12_Documentation_Manager"
+            - "13_Domain_Expert_Coordinator"
+            - "specialists_01_QA_Manager"
+            - "specialists_02_Food_Safety_Manager"
+            - "specialists_03_QMS_Specialist"
+            - "specialists_04_Regulatory_Officer"
+            - "specialists_05_Production_Manager"
+            - "specialists_06_QC_Supervisor"
+        
+        phase:
+          type: "integer"
+          description: "Workflow phase (1-4)"
+          minimum: 1
+          maximum: 4
+        
+        step:
+          type: "integer"
+          description: "Step within phase (1-5)"
+        
+        input_data:
+          type: "object"
+          description: "Input data for the phase"
+        
+        context:
+          type: "object"
+          description: "Project/task context"
+          properties:
+            task_id: { type: "string" }
+            project_name: { type: "string" }
+            previous_outputs: { type: "object" }
+    
+    output_schema:
+      type: "object"
+      properties:
+        status: { type: "string", enum: ["STARTED", "IN_PROGRESS", "COMPLETED", "FAILED"] }
+        phase: { type: "integer" }
+        step: { type: "integer" }
+        output: { type: "object" }
+        next_trigger: { type: "string" }
+        next_agent: { type: "string" }
+        errors: { type: "array" }
+
+  # GET AGENT WORKFLOW CAPABILITY
+  get_workflow:
+    description: "Get the complete workflow for an agent"
+    input_schema:
+      type: "object"
+      properties:
+        agent_id:
+          type: "string"
+          description: "Agent identifier"
+        format:
+          type: "string"
+          enum: ["markdown", "json", "yaml", "executable"]
+          description: "Return format"
+    
+    output_schema:
+      type: "object"
+      properties:
+        agent_id: { type: "string" }
+        workflow: { type: "object" }
+        format: { type: "string" }
+
+  # GET SYSTEM PROMPT CAPABILITY
+  get_system_prompt:
+    description: "Get the AI system prompt for an agent"
+    input_schema:
+      type: "object"
+      properties:
+        agent_id:
+          type: "string"
+          description: "Agent identifier"
+    
+    output_schema:
+      type: "object"
+      properties:
+        agent_id: { type: "string" }
+        system_prompt: { type: "string" }
+        authority_level: { type: "integer" }
+        responsibilities: { type: "array" }
+
+  # GET APPLICABLE TRIGGERS CAPABILITY
+  get_triggers:
+    description: "Get all applicable triggers for current context"
+    input_schema:
+      type: "object"
+      properties:
+        current_phase:
+          type: "integer"
+          description: "Current workflow phase"
+        current_status:
+          type: "string"
+          description: "Current task status"
+        context:
+          type: "object"
+          description: "Project context"
+    
+    output_schema:
+      type: "object"
+      properties:
+        applicable_triggers: { type: "array" }
+        next_agent: { type: "string" }
+        estimated_time: { type: "string" }
+
+  # SUBMIT WORKFLOW OUTPUT CAPABILITY
+  submit_output:
+    description: "Submit output from a completed workflow step"
+    input_schema:
+      type: "object"
+      properties:
+        agent_id: { type: "string" }
+        phase: { type: "integer" }
+        step: { type: "integer" }
+        output: { type: "object" }
+        status: { type: "string", enum: ["PASS", "FAIL", "BLOCKED"] }
+        notes: { type: "string" }
+    
+    output_schema:
+      type: "object"
+      properties:
+        accepted: { type: "boolean" }
+        next_trigger: { type: "string" }
+        message: { type: "string" }
+
+  # GET PROJECT STATUS CAPABILITY
+  get_status:
+    description: "Get current project/task execution status"
+    input_schema:
+      type: "object"
+      properties:
+        task_id: { type: "string" }
+        include_details: { type: "boolean" }
+    
+    output_schema:
+      type: "object"
+      properties:
+        task_id: { type: "string" }
+        current_phase: { type: "integer" }
+        current_agent: { type: "string" }
+        progress: { type: "number" }
+        timeline: { type: "object" }
+        blockers: { type: "array" }
+
+  # ESCALATE ISSUE CAPABILITY
+  escalate:
+    description: "Escalate a blocker or issue to appropriate authority"
+    input_schema:
+      type: "object"
+      properties:
+        reason:
+          type: "string"
+          enum: ["BLOCKER", "DISAGREEMENT", "TIMELINE_RISK", "QUALITY_ISSUE"]
+        description: { type: "string" }
+        affected_agents: { type: "array" }
+        recommended_action: { type: "string" }
+    
+    output_schema:
+      type: "object"
+      properties:
+        escalated_to: { type: "string" }
+        ticket_id: { type: "string" }
+        expected_response_time: { type: "string" }
+
+# Agent definitions (linked to system prompts)
+agents:
+  
+  - id: "01_PM_Tech_Lead"
+    name: "Project Manager & Technical Lead"
+    authority_level: 10
+    system_prompt_path: "../agents/prompts/01_PM_Tech_Lead.md"
+    workflow_path: "agents/01_PM_Tech_Lead_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "get_triggers"
+      - "submit_output"
+      - "escalate"
+    triggers_on:
+      - event: "REQUEST_CREATED"
+        workflow_phase: 1
+        workflow_step: 1
+    can_trigger:
+      - "02_Backend_Architecture_Lead"
+      - "03_Frontend_Architecture_Lead"
+    estimated_effort_hours: 16
+
+  - id: "02_Backend_Architecture_Lead"
+    name: "Backend Architecture Lead"
+    authority_level: 9
+    system_prompt_path: "../agents/prompts/02_Backend_Architecture_Lead.md"
+    workflow_path: "agents/02_Backend_Architecture_Lead_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "get_system_prompt"
+      - "submit_output"
+      - "escalate"
+    triggers_on:
+      - event: "ARCHITECTURE_REQUIRED"
+        source_agent: "01_PM_Tech_Lead"
+    can_trigger:
+      - "07_Backend_Core_Dev"
+      - "11_Database_Engineer"
+    estimated_effort_hours: 24
+
+  - id: "03_Frontend_Architecture_Lead"
+    name: "Frontend Architecture Lead"
+    authority_level: 9
+    system_prompt_path: "../agents/prompts/03_Frontend_Architecture_Lead.md"
+    workflow_path: "agents/03_Frontend_Architecture_Lead_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "submit_output"
+    triggers_on:
+      - event: "ARCHITECTURE_REQUIRED"
+        source_agent: "01_PM_Tech_Lead"
+    can_trigger:
+      - "09_Frontend_Shell_Dev"
+      - "10_Frontend_Module_Dev"
+    estimated_effort_hours: 24
+
+  - id: "04_DevOps_Specialist"
+    name: "DevOps Specialist"
+    authority_level: 8
+    system_prompt_path: "../agents/prompts/04_DevOps_Specialist.md"
+    workflow_path: "agents/04_DevOps_Specialist_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "submit_output"
+    triggers_on:
+      - event: "DEPLOYMENT_REQUIRED"
+        source_agent: "01_PM_Tech_Lead"
+    estimated_effort_hours: 8
+
+  - id: "05_QA_Security_Specialist"
+    name: "QA & Security Specialist"
+    authority_level: 8
+    system_prompt_path: "../agents/prompts/05_QA_Security_Specialist.md"
+    workflow_path: "agents/05_QA_Security_Specialist_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "submit_output"
+      - "escalate"
+    triggers_on:
+      - event: "QA_TESTING_REQUIRED"
+        source_agent: "07_Backend_Core_Dev"
+    can_trigger:
+      - "01_PM_Tech_Lead"
+    estimated_effort_hours: 16
+
+  - id: "06_AI_ML_Specialist"
+    name: "AI/ML Specialist"
+    authority_level: 8
+    system_prompt_path: "../agents/prompts/06_AI_ML_Specialist.md"
+    workflow_path: "agents/06_AI_ML_Specialist_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "submit_output"
+    triggers_on:
+      - event: "AI_ML_REVIEW_REQUIRED"
+        feature_type: "ai_feature"
+    estimated_effort_hours: 40
+
+  - id: "07_Backend_Core_Dev"
+    name: "Backend Core Developer"
+    authority_level: 7
+    system_prompt_path: "../agents/prompts/07_Backend_Core_Dev.md"
+    workflow_path: "agents/07_Backend_Core_Dev_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "get_system_prompt"
+      - "submit_output"
+      - "escalate"
+    triggers_on:
+      - event: "TASK_ASSIGNED_TO_DEV"
+        task_type: "backend_core"
+    estimated_effort_hours: 40
+
+  # ... (continue for all 19 agents)
+
+  - id: "specialists_02_Food_Safety_Manager"
+    name: "Food Safety Manager (Specialist)"
+    authority_level: 9
+    system_prompt_path: "../specialists/prompts/specialists_02_Food_Safety_Manager.md"
+    workflow_path: "agents/specialists_02_Food_Safety_Manager_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "submit_output"
+      - "escalate"
+    triggers_on:
+      - event: "FOOD_SAFETY_REVIEW_REQUIRED"
+        affects_area: "fermentation|production|safety"
+    can_trigger:
+      - "01_PM_Tech_Lead"
+      - "13_Domain_Expert_Coordinator"
+    estimated_effort_hours: 8
+
+  - id: "specialists_03_QMS_Specialist"
+    name: "QMS Specialist"
+    authority_level: 9
+    system_prompt_path: "../specialists/prompts/specialists_03_QMS_Specialist.md"
+    workflow_path: "agents/specialists_03_QMS_Specialist_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "submit_output"
+      - "escalate"
+    triggers_on:
+      - event: "QMS_REVIEW_REQUIRED"
+        affects_processes: true
+    estimated_effort_hours: 8
+
+  - id: "specialists_05_Production_Manager"
+    name: "Production Manager (Specialist)"
+    authority_level: 9
+    system_prompt_path: "../specialists/prompts/specialists_05_Production_Manager.md"
+    workflow_path: "agents/specialists_05_Production_Manager_WORKFLOW.md"
+    capabilities:
+      - "execute_workflow"
+      - "get_workflow"
+      - "submit_output"
+      - "escalate"
+    triggers_on:
+      - event: "PRODUCTION_REVIEW_REQUIRED"
+        affects_operations: true
+    estimated_effort_hours: 8
+
+# Trigger definitions
+triggers:
+  - id: "trigger.planning.intake"
+    event: "REQUEST_CREATED"
+    source_agent: null
+    target_agent: "01_PM_Tech_Lead"
+    phase: 1
+    step: 1
+    
+  - id: "trigger.planning.to_architects"
+    event: "INTAKE_COMPLETE"
+    source_agent: "01_PM_Tech_Lead"
+    target_agents: ["02_Backend_Architecture_Lead", "03_Frontend_Architecture_Lead"]
+    phase: 1
+    step: 2
+    execution_mode: "parallel"
+    
+  - id: "trigger.execution.code_push"
+    event: "CODE_PUSHED"
+    source_agent: "07_Backend_Core_Dev"
+    target_agent: "automated_tests"
+    phase: 2
+    step: 1
+
+# Execution rules
+execution:
+  
+  # How to handle concurrent workflows
+  concurrency:
+    max_parallel_agents: 8
+    max_parallel_phases: 2
+    
+  # How to handle failures
+  error_handling:
+    on_failure: "escalate_and_block"
+    max_retries: 3
+    retry_delay_seconds: 60
+    
+  # Timeouts
+  timeouts:
+    phase_1: "5 days"
+    phase_2: "4 weeks"
+    phase_3: "2 days"
+    phase_4: "2 days"
+    
+  # Quality gates
+  quality_gates:
+    - id: "gate_1_functionality"
+      phase: 3
+      requires_pass: true
+      
+    - id: "gate_2_security"
+      phase: 3
+      requires_pass: true
+      blocks_deployment_if_critical: true
+      
+    - id: "gate_3_performance"
+      phase: 3
+      requires_pass: true
+      
+    - id: "gate_4_compliance"
+      phase: 3
+      requires_pass: true
+      requires_specialist_approval: true
+
+# IDE Integration
+ide_integration:
+  
+  # Protocol support
+  protocols:
+    - "stdio"
+    - "http"
+    - "websocket"
+  
+  # Supported IDEs
+  supported_ides:
+    - "Claude (API)"
+    - "AntiGravity (Google)"
+    - "Cursor"
+    - "Continue"
+    - "Copilot"
+    - "Jetbrains AI Assistant"
+  
+  # How IDEs invoke workflows
+  invocation:
+    method: "function_call"
+    format: "json"
+    example:
+      capability: "execute_workflow"
+      parameters:
+        agent_id: "07_Backend_Core_Dev"
+        phase: 2
+        step: 1
+        input_data:
+          task_id: "PH-002"
+          task_title: "pH API Implementation"
+
+  # How to display results in IDE
+  ui:
+    status_indicator: "inline"
+    output_format: "structured"
+    notifications: "toast + sidebar"
+    links:
+      - "Open in Jira"
+      - "View workflow"
+      - "See architecture"
+      - "Check tests"
+
+# Persistence & State Management
+state:
+  
+  # Where to store execution state
+  backend:
+    type: "postgresql"
+    connection: "env:DATABASE_URL"
+    
+  # What to persist
+  persistence:
+    - "workflow_execution_history"
+    - "agent_outputs"
+    - "quality_gate_results"
+    - "escalations"
+    - "timeline_tracking"
+  
+  # State transitions
+  transitions:
+    REQUEST_CREATED: ["PLANNING_STARTED"]
+    PLANNING_STARTED: ["INTAKE_IN_PROGRESS"]
+    INTAKE_IN_PROGRESS: ["INTAKE_COMPLETE"]
+    INTAKE_COMPLETE: ["ARCHITECTURE_STARTED"]
+    ARCHITECTURE_STARTED: ["ARCHITECTURE_IN_PROGRESS"]
+    ARCHITECTURE_IN_PROGRESS: ["ARCHITECTURE_COMPLETE"]
+    ARCHITECTURE_COMPLETE: ["SPECIALIST_REVIEW_STARTED"]
+    SPECIALIST_REVIEW_STARTED: ["SPECIALIST_REVIEW_IN_PROGRESS"]
+    SPECIALIST_REVIEW_IN_PROGRESS: ["SPECIALIST_REVIEW_COMPLETE"]
+    SPECIALIST_REVIEW_COMPLETE: ["PLANNING_COMPLETE"]
+    PLANNING_COMPLETE: ["EXECUTION_STARTED"]
+    EXECUTION_STARTED: ["EXECUTION_IN_PROGRESS"]
+    EXECUTION_IN_PROGRESS: ["VERIFICATION_STARTED"]
+    VERIFICATION_STARTED: ["VERIFICATION_IN_PROGRESS"]
+    VERIFICATION_IN_PROGRESS: ["VALIDATION_STARTED"]
+    VALIDATION_STARTED: ["VALIDATION_IN_PROGRESS"]
+    VALIDATION_IN_PROGRESS: ["DEPLOYMENT_STARTED"]
+    DEPLOYMENT_STARTED: ["DEPLOYMENT_COMPLETE"]
+    DEPLOYMENT_COMPLETE: ["MONITORING_STARTED"]
+
+# Logging & Monitoring
+logging:
+  level: "info"
+  format: "json"
+  outputs:
+    - "stdout"
+    - "file: /var/log/smartlab-workflows.log"
+    - "loki: http://localhost:3100"
+  
+  # What to log
+  captures:
+    - "workflow_start"
+    - "workflow_end"
+    - "agent_assignment"
+    - "output_submission"
+    - "trigger_firing"
+    - "escalations"
+    - "errors"
+
+# Security
+security:
+  
+  # Authentication
+  auth:
+    method: "oauth2"
+    provider: "github"
+    
+  # Authorization
+  authz:
+    rbac: true
+    permission_model:
+      admin: ["all"]
+      pm: ["view_all", "approve_deployment"]
+      architect: ["view_assigned", "submit_output"]
+      developer: ["view_assigned", "submit_output"]
+      specialist: ["view_assigned", "submit_output"]
+  
+  # API keys
+  api_keys:
+    required: true
+    rotation_days: 90
+    
+  # Encryption
+  encryption:
+    in_transit: "tls_1_3"
+    at_rest: "aes_256_gcm"
+
+# Example: How to use from AI IDE
+example_usage:
+  
+  step_1_get_workflow:
+    capability: "get_workflow"
+    input:
+      agent_id: "07_Backend_Core_Dev"
+      format: "executable"
+  
+  step_2_execute_workflow:
+    capability: "execute_workflow"
+    input:
+      agent_id: "07_Backend_Core_Dev"
+      phase: 2
+      step: 1
+      input_data:
+        task_id: "PH-002"
+        task_title: "pH API"
+      context:
+        project_name: "SmartLab"
+        previous_outputs:
+          architecture_spec: "..."
+  
+  step_3_submit_output:
+    capability: "submit_output"
+    input:
+      agent_id: "07_Backend_Core_Dev"
+      phase: 2
+      step: 1
+      output:
+        files_created: ["src/api.ts"]
+        tests_written: 25
+        test_coverage: "85%"
+      status: "PASS"
+  
+  step_4_get_next_trigger:
+    capability: "get_triggers"
+    input:
+      current_phase: 2
+      current_status: "EXECUTION_IN_PROGRESS"
+      context:
+        task_id: "PH-002"
+
+# Version history
+versions:
+  "1.0":
+    date: "2026-01-30"
+    changes: "Initial release with 19 agents and 4-phase workflow"

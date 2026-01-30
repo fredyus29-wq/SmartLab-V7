@@ -1,0 +1,481 @@
+# AUTOMATIC TRIGGER SYSTEM
+
+**Sistema de Triggers que Aciona Agentes Automaticamente**
+
+**Versão**: 1.0  
+**Data**: 2026-01-30
+
+---
+
+## Visão Geral
+
+O sistema de triggers **automatiza o acionamento de agentes** baseado em eventos e status de tarefas.
+
+Tipos de triggers:
+- **Status Triggers**: Acionados por mudança de status
+- **Time Triggers**: Acionados por tempo decorrido
+- **Completion Triggers**: Acionados quando tarefa completa
+- **Escalation Triggers**: Acionados por blockers/issues
+- **Review Triggers**: Acionados por revisões completadas
+
+---
+
+## Trigger Configuration (YAML)
+
+### Phase 1 Triggers - PLANNING
+
+```yaml
+# TRIGGER: PM receives new request
+- id: trigger.planning.intake
+  name: "New Request Intake"
+  event: "REQUEST_CREATED"
+  action: "ASSIGN_TO_PM"
+  agent: "01_PM_Tech_Lead"
+  task: "Intake & Decomposition"
+  timeout: "12 hours"
+  escalation: "If PM doesn't start in 4 hours → notify PM"
+
+# TRIGGER: PM completes intake, send to architects
+- id: trigger.planning.to_architects
+  name: "Send to Architecture Planning"
+  event: "INTAKE_COMPLETE"
+  conditions:
+    - initial_backlog_created: true
+    - scope_defined: true
+  actions:
+    - IF feature_type == "backend": 
+        assign_to: "02_Backend_Architecture_Lead"
+    - IF feature_type == "frontend":
+        assign_to: "03_Frontend_Architecture_Lead"
+    - IF feature_type == "both":
+        assign_to: ["02_Backend_Architecture_Lead", "03_Frontend_Architecture_Lead"]
+  task: "Architecture Planning"
+  timeout: "2 days"
+  parallel: true
+
+# TRIGGER: Architects complete design, send to specialists
+- id: trigger.planning.to_specialists
+  name: "Send to Specialist Validation"
+  event: "ARCHITECTURE_COMPLETE"
+  conditions:
+    - architecture_decision_made: true
+    - risks_identified: true
+  actions:
+    - IF contains("food_safety"): assign_to: "02_Food_Safety_Manager"
+    - IF contains("production"): assign_to: "05_Production_Manager"
+    - IF contains("lab"): assign_to: "06_QC_Supervisor"
+    - IF contains("quality"): assign_to: "03_QMS_Specialist"
+    - IF contains("regulatory"): assign_to: "04_Regulatory_Officer"
+  task: "Specialist Validation"
+  timeout: "3 days"
+  parallel: true
+
+# TRIGGER: All specialists review complete, generate backlog
+- id: trigger.planning.generate_backlog
+  name: "Generate Sprint Backlog"
+  event: "ALL_SPECIALISTS_REVIEWED"
+  conditions:
+    - specialist_count >= 1
+    - all_specialists_approved: true
+  action: "ASSIGN_TO_PM"
+  agent: "01_PM_Tech_Lead"
+  task: "Backlog Generation & Plan"
+  timeout: "1 day"
+  notify: ["Team Leads"]
+
+# TRIGGER: Planning phase complete, activate execution
+- id: trigger.planning.complete
+  name: "Planning Phase Complete"
+  event: "BACKLOG_APPROVED"
+  conditions:
+    - implementation_plan_created: true
+    - sprint_backlog_ready: true
+  actions:
+    - ACTIVATE_EXECUTION_PHASE
+    - NOTIFY_ALL_TEAMS
+    - CONFIGURE_AUTO_TRIGGERS_EXECUTION
+  timeout: "immediate"
+
+```
+
+### Phase 2 Triggers - EXECUTION
+
+```yaml
+# TRIGGER: Task ready, assign to developer
+- id: trigger.execution.task_ready
+  name: "Task Ready for Development"
+  event: "TASK_STATUS_READY"
+  conditions:
+    - dependencies_complete: true
+    - developer_assigned: true
+  action: "NOTIFY_DEVELOPER"
+  timeout: "12 hours"
+  escalation: "If developer doesn't start in 24h → reassign"
+
+# TRIGGER: Developer pushes code, run automated checks
+- id: trigger.execution.code_push
+  name: "Code Push - Run Automated Tests"
+  event: "CODE_PUSHED_TO_BRANCH"
+  actions:
+    - RUN_LINTING
+    - RUN_UNIT_TESTS
+    - RUN_SECURITY_SCAN
+    - CHECK_CODE_COVERAGE
+  timeout: "15 minutes"
+  notifications:
+    - IF tests_fail: NOTIFY_DEVELOPER
+    - IF tests_pass: REQUEST_CODE_REVIEW
+
+# TRIGGER: All checks pass, request code review
+- id: trigger.execution.code_review_request
+  name: "Request Code Review"
+  event: "AUTOMATED_CHECKS_PASSED"
+  conditions:
+    - linting_passed: true
+    - tests_passed: true
+    - coverage_adequate: true
+    - no_critical_vulnerabilities: true
+  actions:
+    - IF core_service: assign_to: "02_Backend_Architecture_Lead"
+    - IF component: assign_to: "03_Frontend_Architecture_Lead"
+    - IF always: assign_to: relevant_team_lead
+  timeout: "24 hours"
+  escalation: "If not reviewed in 24h → notify architect"
+
+# TRIGGER: Code review approved, merge to main
+- id: trigger.execution.merge_ready
+  name: "Code Review Approved - Ready to Merge"
+  event: "CODE_REVIEW_APPROVED"
+  conditions:
+    - reviewer_approved: true
+    - all_tests_still_passing: true
+  actions:
+    - MERGE_TO_MAIN
+    - TRIGGER_INTEGRATION_TESTS
+  timeout: "immediate"
+
+# TRIGGER: Code merged, start integration testing
+- id: trigger.execution.integration_start
+  name: "Start Integration Testing"
+  event: "CODE_MERGED_TO_MAIN"
+  action: "ASSIGN_TO_QA"
+  agent: "05_QA_Security_Specialist"
+  task: "Integration & Testing"
+  timeout: "3 days"
+
+# TRIGGER: Integration tests complete, check if specialist review needed
+- id: trigger.execution.specialist_review_check
+  name: "Check if Specialist Review Needed"
+  event: "INTEGRATION_TESTS_COMPLETE"
+  conditions:
+    - integration_tests_passed: true
+  actions:
+    - IF feature_involves_food_safety: TRIGGER_SPECIALIST_REVIEW
+    - IF feature_involves_production: TRIGGER_SPECIALIST_REVIEW
+    - IF feature_involves_lab: TRIGGER_SPECIALIST_REVIEW
+    - IF feature_involves_quality: TRIGGER_SPECIALIST_REVIEW
+    - ELSE: SKIP_TO_VERIFICATION
+
+# TRIGGER: Integration complete, notify specialist
+- id: trigger.execution.specialist_notify
+  name: "Notify Specialist for Review"
+  event: "SPECIALIST_REVIEW_NEEDED"
+  actions:
+    - IF feature_type == "food_safety": assign_to: "02_Food_Safety_Manager"
+    - IF feature_type == "production": assign_to: "05_Production_Manager"
+    - IF feature_type == "lab": assign_to: "06_QC_Supervisor"
+    - IF feature_type == "quality": assign_to: "03_QMS_Specialist"
+  timeout: "3 days"
+  escalation: "If not reviewed in 3d → domain_expert_coordinator"
+
+# TRIGGER: Specialist approves, check architecture
+- id: trigger.execution.specialist_approved
+  name: "Specialist Approved - Check Architecture"
+  event: "SPECIALIST_APPROVED"
+  conditions:
+    - specialist_approval: "approved"
+  actions:
+    - IF core_system: TRIGGER_ARCHITECTURE_REVIEW
+    - ELSE: MOVE_TO_VERIFICATION
+
+# TRIGGER: Architecture review complete
+- id: trigger.execution.architecture_review
+  name: "Architecture Review Complete"
+  event: "ARCHITECTURE_REVIEW_COMPLETE"
+  conditions:
+    - architecture_approved: true
+  action: "MOVE_TO_VERIFICATION_PHASE"
+
+```
+
+### Phase 3 Triggers - VERIFICATION (Quality Gates)
+
+```yaml
+# TRIGGER: Move to verification phase
+- id: trigger.verification.start
+  name: "Start Verification Phase"
+  event: "EXECUTION_PHASE_COMPLETE"
+  actions:
+    - RUN_FUNCTIONALITY_GATE
+    - RUN_SECURITY_GATE
+    - RUN_PERFORMANCE_GATE
+    - RUN_COMPLIANCE_GATE
+  timeout: "2 days"
+
+# TRIGGER: Functionality gate failure
+- id: trigger.verification.functionality_fail
+  name: "Functionality Gate Failed"
+  event: "FUNCTIONALITY_GATE_FAILED"
+  conditions:
+    - acceptance_criteria_not_met: true
+  actions:
+    - CREATE_BUG_TICKET
+    - ASSIGN_TO_DEVELOPER
+    - NOTIFY_ARCHITECT
+    - HOLD_DEPLOYMENT
+  priority: "critical"
+
+# TRIGGER: Security gate failure
+- id: trigger.verification.security_fail
+  name: "Security Gate Failed"
+  event: "SECURITY_GATE_FAILED"
+  conditions:
+    - vulnerability_found: true
+  actions:
+    - IF severity == "critical": BLOCK_DEPLOYMENT
+    - IF severity == "high": CREATE_SECURITY_TICKET
+    - IF severity == "medium": ADD_TO_BACKLOG
+    - NOTIFY_QA_SECURITY_SPECIALIST
+  priority: "high"
+
+# TRIGGER: Performance gate failure
+- id: trigger.verification.performance_fail
+  name: "Performance Gate Failed"
+  event: "PERFORMANCE_GATE_FAILED"
+  conditions:
+    - response_time_exceeded: true
+  actions:
+    - MEASURE_EXCESS
+    - IF excess > 20%: BLOCK_DEPLOYMENT
+    - ELSE: DOCUMENT_TRADEOFF
+    - NOTIFY_DEVOPS_ARCHITECT
+
+# TRIGGER: All gates pass, move to validation
+- id: trigger.verification.all_pass
+  name: "All Quality Gates Passed"
+  event: "ALL_VERIFICATION_GATES_PASSED"
+  conditions:
+    - functionality_passed: true
+    - security_passed: true
+    - performance_passed: true
+    - compliance_passed: true
+  action: "MOVE_TO_VALIDATION_PHASE"
+  timeout: "immediate"
+
+```
+
+### Phase 4 Triggers - VALIDATION
+
+```yaml
+# TRIGGER: Validation phase start
+- id: trigger.validation.start
+  name: "Start Validation Phase"
+  event: "VERIFICATION_COMPLETE"
+  actions:
+    - NOTIFY_SPECIALISTS_FOR_APPROVAL
+    - NOTIFY_ARCHITECTS_FOR_SIGNOFF
+  timeout: "2 days"
+
+# TRIGGER: Specialist approval received
+- id: trigger.validation.specialist_approval
+  name: "Specialist Approval Received"
+  event: "SPECIALIST_APPROVAL_RECEIVED"
+  conditions:
+    - all_specialists_approved: true
+  action: "MOVE_TO_ARCHITECTURE_SIGNOFF"
+
+# TRIGGER: Architecture sign-off received
+- id: trigger.validation.architecture_signoff
+  name: "Architecture Sign-off Received"
+  event: "ARCHITECTURE_SIGNOFF_RECEIVED"
+  conditions:
+    - all_architects_approved: true
+  action: "REQUEST_PM_APPROVAL"
+  agent: "01_PM_Tech_Lead"
+
+# TRIGGER: PM approves, ready for deployment
+- id: trigger.validation.pm_approval
+  name: "PM Approval - Ready for Deployment"
+  event: "PM_APPROVAL_RECEIVED"
+  conditions:
+    - pm_approved: true
+  action: "TRIGGER_DEPLOYMENT"
+  agent: "04_DevOps_Specialist"
+
+# TRIGGER: Deployment complete
+- id: trigger.validation.deployment_complete
+  name: "Deployment Complete - Monitor"
+  event: "DEPLOYMENT_SUCCESSFUL"
+  actions:
+    - ACTIVATE_MONITORING
+    - RUN_SMOKE_TESTS
+    - ALERT_ON_ISSUES
+  timeout: "ongoing"
+
+```
+
+### Escalation Triggers
+
+```yaml
+# TRIGGER: Task in planning > 7 days
+- id: trigger.escalation.planning_delay
+  name: "Planning Phase Delay"
+  event: "TASK_IN_PLANNING_7_DAYS"
+  action: "NOTIFY_PM"
+  priority: "medium"
+  message: "Planning phase taking longer than expected. Need intervention?"
+
+# TRIGGER: Code review pending > 24 hours
+- id: trigger.escalation.review_pending
+  name: "Code Review Pending"
+  event: "CODE_REVIEW_PENDING_24H"
+  action: "NOTIFY_ARCHITECT"
+  priority: "medium"
+  message: "Code review pending 24+ hours. Please prioritize."
+
+# TRIGGER: Specialist approval pending > 3 days
+- id: trigger.escalation.specialist_pending
+  name: "Specialist Review Pending"
+  event: "SPECIALIST_REVIEW_PENDING_3D"
+  action: "NOTIFY_SPECIALIST"
+  priority: "high"
+  message: "Specialist review pending 3+ days. Please complete."
+
+# TRIGGER: Quality gate failed, blocker found
+- id: trigger.escalation.quality_gate_blocker
+  name: "Quality Gate Blocker"
+  event: "QUALITY_GATE_FAILED"
+  conditions:
+    - severity: "critical"
+  actions:
+    - NOTIFY_ARCHITECT
+    - NOTIFY_PM
+    - BLOCK_DEPLOYMENT
+  priority: "critical"
+
+# TRIGGER: Specialists disagree
+- id: trigger.escalation.specialist_conflict
+  name: "Specialist Disagreement"
+  event: "SPECIALISTS_DISAGREE"
+  action: "NOTIFY_DOMAIN_EXPERT_COORDINATOR"
+  agent: "13_Domain_Expert_Coordinator"
+  priority: "high"
+  message: "Specialists have conflicting requirements. Coordination needed."
+
+# TRIGGER: Deployment rollback needed
+- id: trigger.escalation.deployment_issue
+  name: "Post-Deployment Issue"
+  event: "PRODUCTION_ISSUE_DETECTED"
+  conditions:
+    - severity: "high"
+  actions:
+    - TRIGGER_ROLLBACK
+    - NOTIFY_DEVOPS
+    - NOTIFY_PM
+    - START_INCIDENT_RESPONSE
+  priority: "critical"
+
+```
+
+---
+
+## Execution Rules
+
+### Rule 1: Event Ordering
+```
+Events are processed in order:
+1. Status change triggers
+2. Time triggers
+3. Completion triggers
+4. Escalation triggers
+(Prevents race conditions)
+```
+
+### Rule 2: Parallel vs Sequential
+```
+Actions marked parallel: Execute simultaneously
+  - Phase 1: Architects + Specialists can work in parallel
+  - Phase 2: Multiple developers can work in parallel
+
+Actions marked sequential: Execute in order
+  - Code review must complete before merge
+  - All gates must pass before validation
+```
+
+### Rule 3: Conditional Execution
+```
+IF conditions met: Execute action
+IF conditions not met: Skip action OR wait
+
+Example:
+  IF feature_type == "production":
+    ASSIGN_TO: Production_Manager
+  ELSE:
+    SKIP
+```
+
+### Rule 4: Notifications
+```
+NOTIFY_DEVELOPER: Email + Slack + Dashboard
+NOTIFY_ARCHITECT: Email + Slack + Dashboard  
+NOTIFY_PM: Email + Slack + Dashboard
+NOTIFY_TEAM: Email list + Slack channel + Dashboard
+
+Include in notification:
+- What happened
+- What's needed next
+- Timeline/SLA
+- Link to task
+```
+
+---
+
+## Monitoring Auto-Triggers
+
+**Dashboard Shows**:
+- Current task status
+- Which trigger just fired
+- Which agent was notified
+- Current phase + progress
+- SLA status (on-time / at-risk / delayed)
+
+**Metrics Tracked**:
+- Time from event to agent assignment
+- Time agent takes to respond
+- Number of trigger cycles per task
+- Success rate of auto-triggers
+- False positives / missed triggers
+
+**Alerts Generated**:
+- Trigger failed to fire (missed event)
+- Agent not responding to assignment
+- SLA approaching
+- Blocker detected
+- Escalation triggered
+
+---
+
+## Implementation
+
+To activate triggers on a task:
+1. Create task in backlog
+2. Set task status to "PLANNING_READY"
+3. System automatically assigns to PM
+4. PM intake starts
+5. Triggers fire automatically based on status changes
+
+---
+
+**Auto-Trigger System Version**: 1.0  
+**Last Updated**: 2026-01-30  
+**Status**: Ready for Implementation
